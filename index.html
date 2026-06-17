@@ -5,27 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Jujutsu: Cursed Domain</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #020208; font-family: 'Courier New', monospace; user-select: none; -webkit-user-select: none; }
-        #ui-top { position: absolute; top: 15px; left: 15px; color: #00ffff; font-size: 16px; font-weight: bold; text-shadow: 2px 2px #000; z-index: 10; display: flex; flex-direction: column; gap: 5px; }
-        .bar-container { width: 180px; height: 12px; background: rgba(0,0,0,0.5); border: 2px solid #00ffff; border-radius: 4px; overflow: hidden; }
-        #bar-energia { width: 100%; height: 100%; background: #0088ff; transition: width 0.1s ease; box-shadow: 0 0 8px #0088ff; }
+        body { margin: 0; overflow: hidden; background: #03030f; font-family: monospace; user-select: none; -webkit-user-select: none; }
+        #ui { position: absolute; top: 15px; left: 15px; color: #00ffff; font-size: 18px; font-weight: bold; text-shadow: 2px 2px #000; z-index: 10; }
+        #txt-bajas { color: #ff0055; margin-top: 5px; }
         #controles { position: absolute; bottom: 35px; left: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; z-index: 10; pointer-events: none; }
         .pad-row { display: flex; justify-content: center; gap: 8px; margin: 4px 0; }
-        .btn-pad { width: 70px; height: 70px; background: rgba(255,255,255,0.12); border: 2px solid rgba(0,255,255,0.4); border-radius: 50%; color: #00ffff; font-weight: bold; font-size: 24px; display: flex; justify-content: center; align-items: center; pointer-events: auto; text-shadow: 0 0 5px #00ffff; }
-        .btn-pad:active { background: rgba(0,255,255,0.3); }
-        #btn-ataque { width: 100px; height: 100px; background: #ff0055; border-radius: 50%; border: 3px solid #ffffff; font-weight: bold; font-size: 14px; color: white; box-shadow: 0 0 25px #ff0055; pointer-events: auto; text-shadow: 1px 1px 2px #000; }
-        #btn-ataque:active { background: #b3003b; transform: scale(0.95); }
+        .btn-pad { width: 70px; height: 70px; background: rgba(255,255,255,0.15); border: 2px solid #00ffff; border-radius: 50%; color: #00ffff; font-weight: bold; font-size: 24px; display: flex; justify-content: center; align-items: center; pointer-events: auto; }
+        #btn-ataque { width: 95px; height: 95px; background: #ff0055; border-radius: 50%; border: 2px solid #fff; font-weight: bold; font-size: 14px; color: white; box-shadow: 0 0 20px #ff0055; pointer-events: auto; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
     </style>
-    <!-- Cargamos el motor gráfico localmente -->
-    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
-    <div id="ui-top">
+    <div id="ui">
         <div>ENERGÍA MALDITA: <span id="txt-energia">100</span>%</div>
-        <div class="bar-container"><div id="bar-energia"></div></div>
-        <div style="margin-top: 5px; color: #ff0055;">MALDICIONES ELIMINADAS: <span id="txt-bajas">0</span></div>
+        <div id="txt-bajas">MALDICIONES: <span id="bajas">0</span></div>
     </div>
     
     <div id="controles">
@@ -37,170 +31,170 @@
         <button id="btn-ataque">KOKUSEN</button>
     </div>
 
-    <script>
-        window.addEventListener('load', () => { init(); });
+    <canvas id="gameCanvas"></canvas>
 
-        let scene, camera, renderer, jugador, flashLight;
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // VARIABLES DEL JUEGO
+        let jugador = { x: 0, z: 0, color: '#0088ff', size: 30 };
         let energia = 100;
         let bajas = 0;
-        const velocidad = 0.28;
+        let maldiciones = [];
+        let proyectiles = [];
+        let destelloEfecto = 0;
+
         const teclas = { w: false, a: false, s: false, d: false };
-        const maldiciones = [];
-        const proyectiles = [];
 
-        function init() {
-            // 1. CREAR EL MOTOR GRÁFICO (ESCENA)
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x02020a);
-            scene.fog = new THREE.FogExp2(0x02020a, 0.035);
-            
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            document.body.appendChild(renderer.domElement);
+        // Vincular controles táctiles
+        function vincular(id, tecla) {
+            const el = document.getElementById(id);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); teclas[tecla] = true; });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); teclas[tecla] = false; });
+        }
+        vincular('btn-w', 'w');
+        vincular('btn-a', 'a');
+        vincular('btn-s', 's');
+        vincular('btn-d', 'd');
 
-            // 2. CONSTRUIR LA ARENA DE COMBATE
-            const sueloGeo = new THREE.PlaneGeometry(80, 80);
-            const sueloMat = new THREE.MeshStandardMaterial({ color: 0x0f0f1a, roughness: 0.9 });
-            const suelo = new THREE.Mesh(sueloGeo, sueloMat);
-            suelo.rotation.x = -Math.PI / 2;
-            scene.add(suelo);
+        // Botón de Ataque Kokusen
+        document.getElementById('btn-ataque').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (energia >= 30) {
+                energia -= 30;
+                destelloEfecto = 5; // Activa flash rojo de impacto
 
-            const gridHelper = new THREE.GridHelper(80, 20, 0x00ffff, 0x111125);
-            gridHelper.position.y = 0.02;
-            scene.add(gridHelper);
-
-            // 3. NUESTRO HECHICERO (Cubo Azul de Energía)
-            const jugadorGeo = new THREE.BoxGeometry(2, 3, 2);
-            const jugadorMat = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x003366, roughness: 0.2 });
-            jugador = new THREE.Mesh(jugadorGeo, jugadorMat);
-            jugador.position.set(0, 1.5, 0);
-            scene.add(jugador);
-
-            // Iluminación táctica anime
-            const luzDir = new THREE.DirectionalLight(0xffffff, 1.2);
-            luzDir.position.set(15, 30, 15);
-            scene.add(luzDir);
-            
-            const luzAmb = new THREE.AmbientLight(0x1a1a2e);
-            scene.add(luzAmb);
-
-            flashLight = new THREE.PointLight(0xff0044, 0, 30);
-            scene.add(flashLight);
-
-            // Configurar Cámara Inicial
-            camera.position.set(0, 10, 16);
-            camera.lookAt(jugador.position);
-
-            // 4. SISTEMA DE CONTROLES TÁCTILES MÓVILES
-            function vincularBoton(id, accion) {
-                const el = document.getElementById(id);
-                el.addEventListener('touchstart', (e) => { e.preventDefault(); teclas[accion] = true; });
-                el.addEventListener('touchend', (e) => { e.preventDefault(); teclas[accion] = false; });
+                // Disparar proyectil hacia adelante
+                let dx = 0, dz = -1;
+                if (teclas.a) dx = -1;
+                if (teclas.d) dx = 1;
+                if (teclas.w) dz = -1;
+                if (teclas.s) dz = 1;
+                
+                proyectiles.push({ x: jugador.x, z: jugador.z, dx: dx, dz: dz });
             }
-            vincularBoton('btn-w', 'w');
-            vincularBoton('btn-a', 'a');
-            vincularBoton('btn-s', 's');
-            vincularBoton('btn-d', 'd');
+        });
 
-            // 5. MECÁNICA DE ATAQUE REY: KOKUSEN (DESTELLO NEGRO)
-            const txtEnergia = document.getElementById('txt-energia');
-            const barEnergia = document.getElementById('bar-energia');
-            const txtBajas = document.getElementById('txt-bajas');
+        // Recarga de energía
+        setInterval(() => {
+            if (energia < 100) {
+                energia = Math.min(energia + 4, 100);
+                document.getElementById('txt-energia').innerText = energia;
+            }
+        }, 300);
 
-            document.getElementById('btn-ataque').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (energia >= 30) {
-                    energia -= 30;
-                    txtEnergia.innerText = Math.floor(energia);
-                    barEnergia.style.width = energia + '%';
-                    
-                    // Disparar ráfaga mística de impacto frontal
-                    crearImpactoMaldito();
+        // Generar maldiciones cada 2 segundos
+        setInterval(() => {
+            if (maldiciones.length < 8) {
+                let ang = Math.random() * Math.PI * 2;
+                maldiciones.push({
+                    x: jugador.x + Math.cos(ang) * 300,
+                    z: jugador.z + Math.sin(ang) * 300
+                });
+            }
+        }, 200);
 
-                    // Destello visual de pantalla rojo y negro (Kokusen!)
-                    jugador.material.color.setHex(0xff0044);
-                    jugador.scale.set(1.5, 1.5, 1.5);
-                    scene.background.setHex(0xff0033);
-                    flashLight.intensity = 5;
-                    flashLight.position.copy(jugador.position);
+        // BUCLE PRINCIPAL DE GRÁFICOS NATIIVOS
+        function loop() {
+            // Actualizar posiciones
+            if (teclas.w) jugador.z -= 4;
+            if (teclas.s) jugador.z += 4;
+            if (teclas.a) jugador.x -= 4;
+            if (teclas.d) jugador.x += 4;
 
-                    setTimeout(() => {
-                        jugador.material.color.setHex(0x00aaff);
-                        jugador.scale.set(1, 1, 1);
-                        scene.background.setHex(0x02020a);
-                        flashLight.intensity = 0;
-                    }, 200);
+            // Mover proyectiles
+            for (let i = proyectiles.length - 1; i >= 0; i--) {
+                let p = proyectiles[i];
+                if (p.dx === 0 && p.dz === 0) p.dz = -1;
+                p.x += p.dx * 12;
+                p.z += p.dz * 12;
+
+                // Destruir proyectil si se aleja
+                if (Math.abs(p.x - jugador.x) > 400 || Math.abs(p.z - jugador.z) > 400) {
+                    proyectiles.splice(i, 1);
                 }
+            }
+
+            // Mover Maldiciones (IA de persecución)
+            for (let i = maldiciones.length - 1; i >= 0; i--) {
+                let m = maldiciones[i];
+                let dist = Math.hypot(jugador.x - m.x, jugador.z - m.z);
+                if (dist > 5) {
+                    m.x += ((jugador.x - m.x) / dist) * 2;
+                    m.z += ((jugador.z - m.z) / dist) * 2;
+                }
+
+                // Colisión proyectil - maldición
+                for (let j = proyectiles.length - 1; j >= 0; j--) {
+                    let p = proyectiles[j];
+                    if (Math.hypot(p.x - m.x, p.z - m.z) < 25) {
+                        maldiciones.splice(i, 1);
+                        proyectiles.splice(j, 1);
+                        bajas++;
+                        document.getElementById('bajas').innerText = bajas;
+                        break;
+                    }
+                }
+            }
+
+            // DIBUJAR TODO EN PANTALLA
+            ctx.fillStyle = destelloEfecto > 0 ? '#ff0033' : '#04040f';
+            if (destelloEfecto > 0) destelloEfecto--;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Centro de la pantalla para la cámara fija en tercera persona
+            let cx = canvas.width / 2;
+            let cy = canvas.height / 2 + 100;
+
+            // Dibujar cuadrícula del piso
+            ctx.strokeStyle = '#151535';
+            ctx.lineWidth = 1;
+            for (let i = -10; i <= 10; i++) {
+                // Líneas horizontales y verticales simulando perspectiva 3D
+                ctx.beginPath();
+                ctx.moveTo(0, cy + i * 30);
+                ctx.lineTo(canvas.width, cy + i * 30);
+                ctx.stroke();
+            }
+
+            // Dibujar Proyectiles (Destellos de energía)
+            ctx.fillStyle = '#ff0055';
+            proyectiles.forEach(p => {
+                let scrX = cx + (p.x - jugador.x);
+                let scrY = cy + (p.z - jugador.z) * 0.7; // Factor de perspectiva vertical
+                ctx.beginPath();
+                ctx.arc(scrX, scrY, 10, 0, Math.PI * 2);
+                ctx.fill();
             });
 
-            // Recuperación de Maná/Energía pasiva
-            setInterval(() => {
-                if (energia < 100) {
-                    energia = Math.min(energia + 3.5, 100);
-                    txtEnergia.innerText = Math.floor(energia);
-                    barEnergia.style.width = energia + '%';
-                }
-            }, 300);
+            // Dibujar Maldiciones Enemigas (Cubos Rojos)
+            ctx.fillStyle = '#990000';
+            maldiciones.forEach(m => {
+                let scrX = cx + (m.x - jugador.x) - 12;
+                let scrY = cy + (m.z - jugador.z) * 0.7 - 25;
+                ctx.fillRect(scrX, scrY, 25, 35);
+                ctx.strokeStyle = '#ff0000';
+                ctx.strokeRect(scrX, scrY, 25, 35);
+            });
 
-            // Generar oleadas automáticas de maldiciones (Cada 3 segundos)
-            setInterval(() => { spawnMaldicion(); }, 3000);
+            // Dibujar Hechicero (Cubo Azul Eléctrico central)
+            ctx.fillStyle = '#0088ff';
+            ctx.fillRect(cx - 15, cy - 40, 30, 45);
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cx - 15, cy - 40, 30, 45);
 
-            // Arrancar renderizador continuo
-            animate();
+            requestAnimationFrame(loop);
         }
-
-        // 6. GENERADOR DE MALDICIONES ENEMIGAS (Cubos Rojos)
-        function spawnMaldicion() {
-            if (maldiciones.length >= 10) return; // Límite de enemigos en pantalla
-            const geo = new THREE.BoxGeometry(1.8, 1.8, 1.8);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x880000, emissive: 0x330000 });
-            const maldicion = new THREE.Mesh(geo, mat);
-
-            // Aparecen al azar en los bordes de la arena de combate
-            const angulo = Math.random() * Math.PI * 2;
-            maldicion.position.x = jugador.position.x + Math.cos(angulo) * 30;
-            maldicion.position.z = jugador.position.z + Math.sin(angulo) * 30;
-            maldicion.position.y = 0.9;
-            
-            scene.add(maldicion);
-            maldiciones.push(maldicion);
-        }
-
-        // GENERADOR DE PROYECTILES DE ENERGÍA
-        function crearImpactoMaldito() {
-            const geo = new THREE.SphereGeometry(1, 8, 8);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
-            const bala = new THREE.Mesh(geo, mat);
-            
-            bala.position.copy(jugador.position);
-            bala.position.y = 1.5;
-
-            // Determinar dirección de disparo basándose en hacia dónde se mueve el jugador
-            let dx = 0, dz = -1;
-            if (teclas.a) dx = -1;
-            if (teclas.d) dx = 1;
-            if (teclas.w) dz = -1;
-            if (teclas.s) dz = 1;
-            
-            const dir = new THREE.Vector3(dx, 0, dz).normalize();
-            bala.userData = { dir: dir };
-            
-            scene.add(bala);
-            proyectiles.push(bala);
-        }
-
-        // 7. BUCLE FÍSICO Y GRÁFICO PRINCIPAL
-        function animate() {
-            requestAnimationFrame(animate);
-
-            // Procesar movimiento del hechicero
-            if (teclas.w) jugador.position.z -= velocidad;
-            if (teclas.s) jugador.position.z += velocidad;
-            if (teclas.a) jugador.position.x -= velocidad;
-            if (teclas.d) jugador.position.x += velocidad;
-
-            // Barrera física para no salirse del mapa
-            jugador.position.x = Math.max(-38, Math.min(38, jugador.position.x));
+        loop();
+    </script>
+</body>
+</html>
