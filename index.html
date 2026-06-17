@@ -2,93 +2,138 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jujutsu: Cursed Energy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Jujutsu: Cursed Domain</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 18px; text-shadow: 2px 2px #000; }
-        #btn-ataque { position: absolute; bottom: 30px; right: 30px; width: 80px; height: 80px; background: #00ffff; border-radius: 50%; border: none; font-weight: bold; font-size: 14px; box-shadow: 0 0 15px #00ffff; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; user-select: none; }
+        #ui { position: absolute; top: 15px; left: 15px; color: #00ffff; font-size: 20px; font-weight: bold; text-shadow: 2px 2px #000; z-index: 10; }
+        #controles { position: absolute; bottom: 30px; left: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; z-index: 10; }
+        .btn-pad { width: 70px; height: 70px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; color: white; font-weight: bold; font-size: 18px; display: flex; justify-content: center; align-items: center; }
+        #btn-ataque { width: 90px; height: 90px; background: #ff0055; border-radius: 50%; border: none; font-weight: bold; font-size: 14px; color: white; box-shadow: 0 0 20px #ff0055; }
     </style>
-    <!-- Importamos la librería 3D Three.js -->
     <script src="https://cloudflare.com"></script>
 </head>
 <body>
 
-    <div id="ui">Energía Maldita: <span id="energia">100</span>%</div>
-    <button id="btn-ataque">KOKUSEN</button>
+    <div id="ui">ENERGÍA MALDITA: <span id="energia">100</span>%</div>
+    
+    <div id="controles">
+        <div style="display: grid; grid-template-columns: repeat(3, 60px); gap: 5px;">
+            <div></div><div class="btn-pad" id="btn-w">↑</div><div></div>
+            <div class="btn-pad" id="btn-a">←</div><div></div><div class="btn-pad" id="btn-d">→</div>
+            <div></div><div class="btn-pad" id="btn-s">↓</div><div></div>
+        </div>
+        <button id="btn-ataque">KOKUSEN</button>
+    </div>
 
     <script>
-        // 1. CONFIGURACIÓN DEL MUNDO 3D
+        // 1. CONFIGURACIÓN DE LA ESCENA 3D
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a1a); // Cielo oscuro anime
+        scene.background = new THREE.Color(0x050510); // Fondo oscuro místico
+        
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. CREAR EL SUELO
-        const sueloGeo = new THREE.BoxGeometry(50, 1, 50);
-        const sueloMat = new THREE.MeshStandardMaterial({ color: 0x222233 });
+        // 2. CREAR EL SUELO DE ARENA
+        const sueloGeo = new THREE.BoxGeometry(40, 0.5, 40);
+        const sueloMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 });
         const suelo = new THREE.Mesh(sueloGeo, sueloMat);
-        suelo.position.y = -0.5;
         scene.add(suelo);
 
-        // 3. CREAR AL HECHICERO (Cubo azul)
-        const jugadorGeo = new THREE.BoxGeometry(2, 2, 2);
-        const jugadorMat = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+        // Grid visual para dar referencia de espacio 3D
+        const gridHelper = new THREE.GridHelper(40, 20, 0x00ffff, 0x444444);
+        gridHelper.position.y = 0.26;
+        scene.add(gridHelper);
+
+        // 3. JUGADOR (Hechicero - Cubo Azul Eléctrico)
+        const jugadorGeo = new THREE.BoxGeometry(2, 3, 2);
+        const jugadorMat = new THREE.MeshStandardMaterial({ color: 0x0077ff, emissive: 0x002255 });
         const jugador = new THREE.Mesh(jugadorGeo, jugadorMat);
-        jugador.position.y = 1;
+        jugador.position.y = 1.76;
         scene.add(jugador);
 
-        // 4. ILUMINACIÓN
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 10, 7).normalize();
+        // 4. LUCES
+        const light = new THREE.DirectionalLight(0xffffff, 1.5);
+        light.position.set(10, 20, 10);
         scene.add(light);
-        const ambientLight = new THREE.AmbientLight(0x404040);
+        const ambientLight = new THREE.AmbientLight(0x333333);
         scene.add(ambientLight);
 
-        // Posición de la cámara en tercera persona
-        camera.position.set(0, 5, 10);
+        // Posición inicial de la cámara detrás del jugador
+        camera.position.set(0, 8, 14);
         camera.lookAt(jugador.position);
 
-        // 5. VARIABLES DE JUJUTSU
+        // 5. MECÁNICAS DE MOVIMIENTO Y JUJUTSU
         let energia = 100;
         const txtEnergia = document.getElementById('energia');
+        let velocidad = 0.3;
 
-        // Mecánica de recarga pasiva de energía
+        // Registro de botones táctiles activados
+        const teclas = { w: false, a: false, s: false, d: false };
+        
+        function configurarBoton(id, propiedad) {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); teclas[propiedad] = true; });
+            btn.addEventListener('touchend', () => { teclas[propiedad] = false; });
+        }
+        configurarBoton('btn-w', 'w');
+        configurarBoton('btn-a', 'a');
+        configurarBoton('btn-s', 's');
+        configurarBoton('btn-d', 'd');
+
+        // Regeneración pasiva de energía
         setInterval(() => {
             if (energia < 100) {
-                energia = Math.min(energia + 2, 100);
+                energia = Math.min(energia + 4, 100);
                 txtEnergia.innerText = energia;
             }
         }, 500);
 
-        // 6. ACCIÓN: Lanzar ataque especial (Destello Negro)
-        document.getElementById('btn-ataque').addEventListener('touchstart', () => {
+        // Ataque Kokusen Táctil
+        document.getElementById('btn-ataque').addEventListener('touchstart', (e) => {
+            e.preventDefault();
             if (energia >= 30) {
                 energia -= 30;
                 txtEnergia.innerText = energia;
                 
-                // Efecto visual rápido: El hechicero brilla en rojo/negro
-                jugador.material.color.setHex(0xff0000);
-                setTimeout(() => jugador.material.color.setHex(0x0000ff), 200);
+                // Efecto de impacto visual (Cambio de color del hechicero a destello rojo/negro)
+                jugador.material.color.setHex(0xff0033);
+                jugador.scale.set(1.4, 1.4, 1.4);
                 
-                console.log("¡KOKUSEN!");
-            } else {
-                alert("¡Sin energía maldita!");
+                setTimeout(() => {
+                    jugador.material.color.setHex(0x0077ff);
+                    jugador.scale.set(1, 1, 1);
+                }, 300);
             }
         });
 
-        // 7. BUCLE DE RENDERIZADO (Animación)
+        // 6. BUCLE DE JUEGO (Actualiza la física y gráficos)
         function animate() {
             requestAnimationFrame(animate);
-            // El mundo gira despacio para dar dinamismo en el prototipo
-            scene.rotation.y += 0.005; 
+
+            // Mover al jugador según los botones presionados
+            if (teclas.w) jugador.position.z -= velocidad;
+            if (teclas.s) jugador.position.z += velocidad;
+            if (teclas.a) jugador.position.x -= velocidad;
+            if (teclas.d) jugador.position.x += velocidad;
+
+            // Limitar al jugador para que no se salga de la arena 3D
+            jugador.position.x = Math.max(-19, Math.min(19, jugador.position.x));
+            jugador.position.z = Math.max(-19, Math.min(19, jugador.position.z));
+
+            // La cámara sigue de forma suave al personaje
+            camera.position.x = jugador.position.x;
+            camera.position.z = jugador.position.z + 14;
+            camera.lookAt(jugador.position);
+
             renderer.render(scene, camera);
         }
         animate();
 
-        // Ajustar pantalla si se gira el celular
+        // Controlar cambios de tamaño de pantalla al girar el celular
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
