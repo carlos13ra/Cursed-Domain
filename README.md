@@ -1,0 +1,2 @@
+# Cursed-Domain
+Cursed Domain
