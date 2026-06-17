@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jujutsu: Cursed Energy</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 18px; text-shadow: 2px 2px #000; }
+        #btn-ataque { position: absolute; bottom: 30px; right: 30px; width: 80px; height: 80px; background: #00ffff; border-radius: 50%; border: none; font-weight: bold; font-size: 14px; box-shadow: 0 0 15px #00ffff; }
+    </style>
+    <!-- Importamos la librería 3D Three.js -->
+    <script src="https://cloudflare.com"></script>
+</head>
+<body>
+
+    <div id="ui">Energía Maldita: <span id="energia">100</span>%</div>
+    <button id="btn-ataque">KOKUSEN</button>
+
+    <script>
+        // 1. CONFIGURACIÓN DEL MUNDO 3D
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a); // Cielo oscuro anime
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. CREAR EL SUELO
+        const sueloGeo = new THREE.BoxGeometry(50, 1, 50);
+        const sueloMat = new THREE.MeshStandardMaterial({ color: 0x222233 });
+        const suelo = new THREE.Mesh(sueloGeo, sueloMat);
+        suelo.position.y = -0.5;
+        scene.add(suelo);
+
+        // 3. CREAR AL HECHICERO (Cubo azul)
+        const jugadorGeo = new THREE.BoxGeometry(2, 2, 2);
+        const jugadorMat = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+        const jugador = new THREE.Mesh(jugadorGeo, jugadorMat);
+        jugador.position.y = 1;
+        scene.add(jugador);
+
+        // 4. ILUMINACIÓN
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 7).normalize();
+        scene.add(light);
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        // Posición de la cámara en tercera persona
+        camera.position.set(0, 5, 10);
+        camera.lookAt(jugador.position);
+
+        // 5. VARIABLES DE JUJUTSU
+        let energia = 100;
+        const txtEnergia = document.getElementById('energia');
+
+        // Mecánica de recarga pasiva de energía
+        setInterval(() => {
+            if (energia < 100) {
+                energia = Math.min(energia + 2, 100);
+                txtEnergia.innerText = energia;
+            }
+        }, 500);
+
+        // 6. ACCIÓN: Lanzar ataque especial (Destello Negro)
+        document.getElementById('btn-ataque').addEventListener('touchstart', () => {
+            if (energia >= 30) {
+                energia -= 30;
+                txtEnergia.innerText = energia;
+                
+                // Efecto visual rápido: El hechicero brilla en rojo/negro
+                jugador.material.color.setHex(0xff0000);
+                setTimeout(() => jugador.material.color.setHex(0x0000ff), 200);
+                
+                console.log("¡KOKUSEN!");
+            } else {
+                alert("¡Sin energía maldita!");
+            }
+        });
+
+        // 7. BUCLE DE RENDERIZADO (Animación)
+        function animate() {
+            requestAnimationFrame(animate);
+            // El mundo gira despacio para dar dinamismo en el prototipo
+            scene.rotation.y += 0.005; 
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Ajustar pantalla si se gira el celular
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
